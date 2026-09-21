@@ -7,6 +7,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -17,8 +20,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "accounts")
 @Getter
-@Setter
-@NoArgsConstructor
+@Builder
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class Account {
 
     @Id
@@ -29,6 +33,7 @@ public class Account {
     private UUID userId;
 
     @Column(nullable = false)
+    @Setter
     private BigDecimal balance;
 
     @Column(nullable = false, length = 3)
@@ -36,10 +41,4 @@ public class Account {
 
     @Version
     private Long version;
-
-    public Account(UUID userId, String currency) {
-        this.userId = userId;
-        this.balance = BigDecimal.ZERO;
-        this.currency = currency;
-    }
 }

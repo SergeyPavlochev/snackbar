@@ -1,6 +1,8 @@
 package ru.spavlochev.auth.config;
 
+import com.google.protobuf.MessageLite;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -36,5 +38,15 @@ public class KafkaConfig {
     @Bean
     public KafkaTemplate<String, EventEnvelope> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
+    }
+
+    public static class ProtobufSerializer<T extends MessageLite> implements Serializer<T> {
+        @Override
+        public byte[] serialize(String topic, T data) {
+            if (data == null) {
+                return null;
+            }
+            return data.toByteArray();
+        }
     }
 }

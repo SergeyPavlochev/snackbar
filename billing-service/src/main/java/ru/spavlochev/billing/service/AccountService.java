@@ -10,6 +10,7 @@ import ru.spavlochev.billing.openapi.dto.AccountDto;
 import ru.spavlochev.billing.repository.AccountRepository;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,23 +21,25 @@ public class AccountService {
     private static final String DEFAULT_CURRENCY = "RUB";
 
     private final AccountRepository accountRepository;
-    private final EventPublisher eventPublisher;
+    private final OutboxService outboxService;
 
     @Transactional
-    public Account createAccount(UUID userId) {
+    public void createAccount(UUID userId) {
         log.info("Creating account for userId={}", userId);
 
         // Проверяем, не создан ли уже аккаунт
         if (accountRepository.findByUserId(userId).isPresent()) {
             log.warn("Account already exists for userId={}", userId);
-            return accountRepository.findByUserId(userId).get();
+            accountRepository.findByUserId(userId).get();
+            return;
         }
 
-        Account account = new Account(userId, DEFAULT_CURRENCY);
-        account = accountRepository.save(account);
-
+        var account = accountRepository.save(Account.builder()
+                .userId(userId)
+                .currency(DEFAULT_CURRENCY)
+                .balance(BigDecimal.ZERO)
+                .build());
         log.info("Account created: accountId={}, userId={}", account.getId(), userId);
-        return account;
     }
 
     @Transactional
@@ -71,7 +74,12 @@ public class AccountService {
                 .orElseThrow(() -> {
                     String reason = "Account not found for userId=" + userId;
                     log.error(reason);
-                    eventPublisher.publishOrderPaymentFailed(orderId, userId.toString(), amount.toString(), currency, reason);
+                    outboxService.saveEvent("OrderPaymentFailed", UUID.fromString(orderId), "Order",
+                            Map.of("orderId", UUID.fromString(orderId),
+                                    "userId", userId.toString(),
+                                    "amount", amount.toPlainString(),
+                                    "currency", currency,
+                                    "reason", reason));
                     return new EntityNotFoundException(reason);
                 });
 
@@ -79,7 +87,12 @@ public class AccountService {
         if (!account.getCurrency().equals(currency)) {
             String reason = "Currency mismatch: account=" + account.getCurrency() + ", order=" + currency;
             log.error(reason);
-            eventPublisher.publishOrderPaymentFailed(orderId, userId.toString(), amount.toString(), currency, reason);
+            outboxService.saveEvent("OrderPaymentFailed", UUID.fromString(orderId), "Order",
+                    Map.of("orderId", UUID.fromString(orderId),
+                            "userId", userId.toString(),
+                            "amount", amount.toPlainString(),
+                            "currency", currency,
+                            "reason", reason));
             return;
         }
 
@@ -87,7 +100,12 @@ public class AccountService {
         if (account.getBalance().compareTo(amount) < 0) {
             String reason = "Insufficient funds: balance=" + account.getBalance() + ", required=" + amount;
             log.warn(reason);
-            eventPublisher.publishOrderPaymentFailed(orderId, userId.toString(), amount.toString(), currency, reason);
+            outboxService.saveEvent("OrderPaymentFailed", UUID.fromString(orderId), "Order",
+                    Map.of("orderId", UUID.fromString(orderId),
+                            "userId", userId.toString(),
+                            "amount", amount.toPlainString(),
+                            "currency", currency,
+                            "reason", reason));
             return;
         }
 
@@ -96,7 +114,11 @@ public class AccountService {
         accountRepository.save(account);
 
         log.info("Payment successful: orderId={}, newBalance={}", orderId, account.getBalance());
-        eventPublisher.publishOrderPaymentCompleted(orderId, userId.toString(), amount.toString(), currency);
+        outboxService.saveEvent("OrderPaymentCompleted", UUID.fromString(orderId), "Order",
+                Map.of("orderId", UUID.fromString(orderId),
+                        "userId", userId.toString(),
+                        "amount", amount.toPlainString(),
+                        "currency", currency));
     }
 
     @Transactional(readOnly = true)

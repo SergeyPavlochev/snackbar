@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+import ru.spavlochev.notification.entity.ProcessedEvent;
+import ru.spavlochev.notification.repository.ProcessedEventRepository;
 import ru.spavlochev.snackbar.events.v1.EventEnvelope;
 
 import java.util.UUID;
@@ -14,6 +16,8 @@ import java.util.UUID;
 public class EventHandler {
 
     private final NotificationService notificationService;
+    private final ProcessedEventRepository processedEventRepository;
+    private final TransactionExecutor transactionExecutor;
 
     @KafkaListener(topics = "payments", groupId = "${spring.kafka.consumer.group-id}")
     public void handlePaymentEvent(EventEnvelope envelope) {
@@ -21,9 +25,9 @@ public class EventHandler {
 
         try {
             if (envelope.hasOrderPaymentCompleted()) {
-                handleOrderPaymentCompleted(envelope);
+                processEventIdempotently(envelope, () -> handleOrderPaymentCompleted(envelope));
             } else if (envelope.hasOrderPaymentFailed()) {
-                handleOrderPaymentFailed(envelope);
+                processEventIdempotently(envelope, () -> handleOrderPaymentFailed(envelope));
             } else {
                 log.warn("Unexpected payload type in payments topic: {}", envelope.getEventType());
             }
@@ -57,5 +61,36 @@ public class EventHandler {
                 event.getAmount().getAmount() + " " + event.getAmount().getCurrency(),
                 event.getReason()
         );
+    }
+
+    /**
+     * Универсальный метод идемпотентной обработки.
+     * Проверяет, не обрабатывали ли мы уже это событие, и если нет — выполняет бизнес-логику
+     * и сохраняет eventId в одной транзакции.
+     */
+    private void processEventIdempotently(EventEnvelope envelope, Runnable action) {
+        UUID eventId = UUID.fromString(envelope.getEventId());
+
+        // 1. Проверяем, не обработано ли уже событие
+        boolean eventWasProcessed = transactionExecutor.execInTransaction(() ->
+                processedEventRepository.existsByEventId(eventId));
+        if (eventWasProcessed) {
+            log.info("Event already processed, skipping: eventId={}, type={}",
+                    eventId, envelope.getEventType());
+            return;
+        }
+
+        // 2. Выполняем бизнес-логику и сохраняем eventId в одной транзакции
+        // Если бизнес-логика упадет — транзакция откатится, eventId не сохранится
+        // Если сохранение eventId упадет — откатится и бизнес-логика
+        transactionExecutor.execInTransaction(() -> {
+            log.info("Processing event: eventId={}, type={}", eventId, envelope.getEventType());
+            action.run();
+            processedEventRepository.save(ProcessedEvent.builder()
+                    .eventId(eventId)
+                    .eventType(envelope.getEventType())
+                    .build());
+            log.info("Event processed successfully: eventId={}", eventId);
+        });
     }
 }

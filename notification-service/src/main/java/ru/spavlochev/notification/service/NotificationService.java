@@ -24,14 +24,13 @@ public class NotificationService {
     public void createOrderPaidNotification(UUID userId, UUID orderId, String amount) {
         log.info("Creating ORDER_PAID notification for userId={}, orderId={}", userId, orderId);
 
-        Notification notification = new Notification();
-        notification.setUserId(userId);
-        notification.setType(Notification.NotificationType.ORDER_PAID);
-        notification.setOrderId(orderId);
-        notification.setAmount(amount);
-        notification.setMessage("Ваш заказ успешно оплачен. Сумма: " + amount);
-
-        notificationRepository.save(notification);
+        Notification notification = notificationRepository.save(Notification.builder()
+                .userId(userId)
+                .type(Notification.NotificationType.ORDER_PAID)
+                .orderId(orderId)
+                .amount(amount)
+                .message("Ваш заказ успешно оплачен. Сумма: " + amount)
+                .build());
 
         log.info("Notification created: id={}, userId={}, type={}",
                 notification.getId(), userId, notification.getType());
@@ -42,14 +41,13 @@ public class NotificationService {
         log.info("Creating ORDER_FAILED notification for userId={}, orderId={}, reason={}",
                 userId, orderId, reason);
 
-        Notification notification = new Notification();
-        notification.setUserId(userId);
-        notification.setType(Notification.NotificationType.ORDER_FAILED);
-        notification.setOrderId(orderId);
-        notification.setAmount(amount);
-        notification.setMessage("Оплата заказа не удалась. Причина: " + reason);
-
-        notificationRepository.save(notification);
+        Notification notification = notificationRepository.save(Notification.builder()
+                .userId(userId)
+                .type(Notification.NotificationType.ORDER_FAILED)
+                .orderId(orderId)
+                .amount(amount)
+                .message("Оплата заказа не удалась. Причина: " + reason)
+                .build());
 
         log.info("Notification created: id={}, userId={}, type={}",
                 notification.getId(), userId, notification.getType());

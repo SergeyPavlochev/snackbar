@@ -581,7 +581,7 @@
 		},
 		{
 			"key": "email",
-			"value": "test123456@example.ru"
+			"value": "test_email123456@example.ru"
 		},
 		{
 			"key": "password",
@@ -609,7 +609,7 @@
 		},
 		{
 			"key": "retry_count",
-			"value": "0"
+			"value": "4"
 		}
 	]
 }

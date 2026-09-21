@@ -9,6 +9,9 @@ RUN mvn -f contracts/pom.xml clean install -DskipTests
 
 # Кэширование зависимостей сервиса
 COPY auth-service/pom.xml ./auth-service/pom.xml
+RUN mvn -f auth-service/pom.xml dependency:go-offline
+
+# Собрать сервис
 COPY auth-service/src ./auth-service/src
 RUN mvn -f auth-service/pom.xml clean package -DskipTests
 

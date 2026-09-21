@@ -12,6 +12,7 @@ import ru.spavlochev.order.repository.OrderRepository;
 
 import java.math.BigDecimal;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -20,7 +21,7 @@ import java.util.UUID;
 public class OrderService {
 
     private final OrderRepository orderRepository;
-    private final EventPublisher eventPublisher;
+    private final OutboxService outboxService;
 
     @Transactional
     public OrderDto createOrder(UUID userId, CreateOrderRequestDto rqDto) {
@@ -28,23 +29,23 @@ public class OrderService {
         var currency = rqDto.getCurrency();
         log.info("Creating order for userId={}, amount={} {}", userId, amount, currency);
 
-        Order order = new Order();
-        order.setUserId(userId);
-        order.setAmount(new BigDecimal(amount));
-        order.setCurrency(currency);
-        order.setStatus(Order.OrderStatus.PENDING);
+        Order order = Order.builder()
+                .userId(userId)
+                .amount(new BigDecimal(amount))
+                .currency(currency)
+                .status(Order.OrderStatus.PENDING)
+                .build();
 
         order = orderRepository.save(order);
+        outboxService.saveEvent(
+                "OrderCreated", order.getId(), "Order",
+                Map.of("orderId", order.getId().toString(),
+                        "userId", userId.toString(),
+                        "amount", order.getAmount().toPlainString(),
+                        "currency", currency));
 
-        log.info("Order created: orderId={}, userId={}, status={}", order.getId(), userId, order.getStatus());
-
-        // Событие OrderCreated
-        eventPublisher.publishOrderCreated(
-                order.getId().toString(),
-                userId.toString(),
-                amount,
-                currency
-        );
+        log.info("Order and outbox event created: orderId={}, userId={}, status={}",
+                order.getId(), userId, order.getStatus());
 
         return new OrderDto()
                 .id(order.getId())
